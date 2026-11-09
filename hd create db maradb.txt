@@ -1,0 +1,22 @@
+sudo mariadb
+
+// mật khẩu này tạo lúc cài mariadb cần lưu lại
+
+
+
+// export file sql 
+mariadb-dump -u root -p wp_demo01 > wp_demo01.sql
+
+// import
+
+CREATE DATABASE wp_demo01 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+// tạo 1 lần dùng chung
+// thay TaoUserRieng và MatKhauNhapODay bằng thông tin của bro
+CREATE USER 'TaoUserRieng'@'localhost'IDENTIFIED BY 'MatKhauNhapODay';
+
+GRANT ALL PRIVILEGES ON wp_demo01.* TO 'TaoUserRieng'@'localhost';
+
+FLUSH PRIVILEGES;
+
+EXIT;
