@@ -1,0 +1,4 @@
+
+// lệnh phân quyền đọc ghi
+sudo chown -R root:www-data /var/www/wp_demo01
+sudo chmod -R 775 /var/www/wp_demo01
