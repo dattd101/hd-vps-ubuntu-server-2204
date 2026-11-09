@@ -1,0 +1,18 @@
+2. Cài SSL HTTPS miễn phí với Let's Encrypt
+
+// Sau khi domain đã trỏ đúng về VPS, cài Certbot:
+sudo snap install --classic certbot
+
+// Tạo lệnh Certbot:
+sudo ln -s /snap/bin/certbot /usr/bin/certbot
+
+// Cấp chứng chỉ SSL:
+sudo certbot --nginx -d example.com -d www.example.com
+
+// Kiểm tra gia hạn SSL tự động:
+sudo certbot renew --dry-run
+
+// Kiểm tra SSL
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot certificates

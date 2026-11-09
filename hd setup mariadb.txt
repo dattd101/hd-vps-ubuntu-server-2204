@@ -1,0 +1,39 @@
+3. Cài đặt MariaDB
+
+// Cập nhật danh sách package:
+sudo apt update
+
+// Cài MariaDB Server và Client:
+sudo apt install mariadb-server mariadb-client -y
+
+// Kiểm tra phiên bản:
+mariadb --version
+
+// Khởi động MariaDB
+sudo systemctl enable --now mariadb
+
+// Kiểm tra:
+sudo systemctl status mariadb
+
+// Bảo mật MariaDB
+sudo mariadb-secure-installation
+
+Với MariaDB mới cài trên Ubuntu, có thể chọn như sau:
+Câu hỏi	Lựa chọn
+Enter current password for root			Enter
+Switch to unix_socket authentication	Y nếu chưa bật
+Change the root password?				N nếu dùng unix_socket
+Remove anonymous users?					Y
+Disallow root login remotely?			Y
+Remove test database and access to it?	Y
+Reload privilege tables now?			Y
+
+// Cài PHP MySQL Extension
+sudo apt install php8.2-mysql -y
+
+// Khởi động lại PHP-FPM:
+sudo systemctl restart php8.2-fpm
+
+// Kiểm tra extension:
+php -m | grep -Ei 'mysqli|pdo_mysql'
+

@@ -1,0 +1,30 @@
+1. Hướng dẫn cài nginx
+
+// Cập nhật Ubuntu
+sudo apt update
+sudo apt upgrade -y
+
+// Sau đó cài một số tiện ích cần thiết:
+sudo apt install curl wget unzip -y
+
+// Cài đặt Nginx
+sudo apt install nginx -y
+
+// Kiểm tra phiên bản:
+nginx -v
+
+// Kiểm tra trạng thái:
+sudo systemctl status nginx
+
+// Thiết lập Nginx tự khởi động cùng VPS:
+sudo systemctl enable nginx
+sudo systemctl start nginx
+
+// Cấu hình Firewall (UFW)
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+
+// Nếu UFW chưa bật:
+sudo ufw enable
+sudo ufw status
+
