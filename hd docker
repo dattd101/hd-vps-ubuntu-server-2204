@@ -1,0 +1,254 @@
+# **Hướng dẫn cài Docker trên VPS Ubuntu Server 22.04 LTS**
+
+Mình sẽ hướng dẫn bạn cài đặt **Docker Engine + Docker Compose** trên VPS Ubuntu 22.04 bằng repository chính thức của Docker.
+
+Cách này phù hợp để triển khai website, API, Node.js, Python, PostgreSQL, MySQL, Redis, Nginx và các ứng dụng chạy bằng Docker.
+
+**Yêu cầu:**
+
+- VPS chạy Ubuntu Server 22.04 LTS.
+- Có quyền `root` hoặc tài khoản có quyền `sudo`.
+- VPS có kết nối Internet.
+- Truy cập VPS qua SSH.
+
+## **Bước 1: Kết nối SSH vào VPS**
+
+Trên máy tính của bạn, mở Terminal hoặc PowerShell:
+
+```
+ssh root@IP_VPS
+```
+
+Ví dụ:
+
+```
+ssh root@103.123.45.67
+```
+
+Thay `103.123.45.67` bằng IP thực tế của VPS.
+
+Nếu bạn đã đăng nhập vào VPS thì bỏ qua bước này.
+
+## **Bước 2: Cập nhật Ubuntu**
+
+Chạy:
+
+```
+sudo apt update && sudo apt upgrade -y
+```
+
+Cài các gói cần thiết:
+
+```
+sudo apt install -y ca-certificates curl
+```
+
+## **Bước 3: Thêm GPG Key chính thức của Docker**
+
+Tạo thư mục lưu khóa:
+
+```
+sudo install -m 0755 -d /etc/apt/keyrings
+```
+
+Tải khóa GPG:
+
+```
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+```
+
+Cấp quyền đọc:
+
+```
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+```
+
+## **Bước 4: Thêm Docker Repository**
+
+Chạy nguyên khối lệnh sau:
+
+```
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+```
+
+Sau đó cập nhật danh sách package:
+
+```
+sudo apt update
+```
+
+## **Bước 5: Cài Docker Engine và Docker Compose**
+
+Chạy:
+
+```
+sudo apt install -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin
+```
+
+Lệnh này cài đặt đầy đủ:
+
+| Thành phần     | Chức năng                     |
+| -------------- | ----------------------------- |
+| Docker Engine  | Chạy Docker containers        |
+| Docker CLI     | Quản lý Docker qua terminal   |
+| containerd     | Quản lý vòng đời container    |
+| Docker Buildx  | Build Docker images           |
+| Docker Compose | Chạy ứng dụng nhiều container |
+
+## **Bước 6: Khởi động Docker**
+
+```
+sudo systemctl enable --now docker
+```
+
+Kiểm tra trạng thái:
+
+```
+sudo systemctl status docker
+```
+
+Nếu xuất hiện:
+
+```
+Active: active (running)
+```
+
+thì Docker đã hoạt động.
+
+Nhấn `q` để thoát màn hình trạng thái.
+
+## **Bước 7: Kiểm tra Docker đã cài thành công**
+
+Kiểm tra phiên bản Docker:
+
+```
+docker --version
+```
+
+Kiểm tra Docker Compose:
+
+```
+docker compose version
+```
+
+Chạy container thử nghiệm:
+
+```
+sudo docker run hello-world
+```
+
+Nếu thấy:
+
+```
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+```
+
+thì Docker đã được cài đặt thành công.
+
+## **Bước 8: Sử dụng Docker không cần sudo (tùy chọn)**
+
+Nếu bạn đăng nhập bằng tài khoản thường thay vì `root`, có thể thêm tài khoản vào nhóm Docker:
+
+```
+sudo usermod -aG docker $USER
+```
+
+Sau đó đăng xuất SSH và đăng nhập lại, hoặc chạy:
+
+```
+newgrp docker
+```
+
+Kiểm tra:
+
+```
+docker ps
+```
+
+**Lưu ý bảo mật:** Người dùng thuộc nhóm `docker` có quyền tương đương root trên VPS. Chỉ thực hiện với tài khoản quản trị đáng tin cậy.
+
+## **Bước 9: Chạy thử Nginx bằng Docker**
+
+Tạo một container Nginx:
+
+```
+sudo docker run -d \
+  --name nginx-test \
+  -p 8080:80 \
+  --restart unless-stopped \
+  nginx:alpine
+```
+
+Kiểm tra container:
+
+```
+sudo docker ps
+```
+
+Truy cập trình duyệt:
+
+```
+http://IP_VPS:8080
+```
+
+Kết quả mong đợi
+
+## **Welcome to nginx!**
+
+If you see this page, the nginx web server is successfully installed and working.
+
+Nếu VPS bật UFW, bạn có thể cần cấu hình firewall. Lưu ý Docker có thể bỏ qua một số quy tắc UFW khi publish cổng, vì vậy cần kiểm soát cổng ở cả firewall của nhà cung cấp VPS.
+
+Xóa container thử nghiệm khi không cần nữa:
+
+```
+sudo docker rm -f nginx-test
+```
+
+## **Bước 10: Các lệnh Docker thường dùng**
+
+| Lệnh                         | Chức năng                         |
+| ---------------------------- | --------------------------------- |
+| `docker ps`                  | Xem container đang chạy           |
+| `docker ps -a`               | Xem tất cả container              |
+| `docker images`              | Xem Docker images                 |
+| `docker logs -f <container>` | Xem logs                          |
+| `docker restart <container>` | Khởi động lại container           |
+| `docker stop <container>`    | Dừng container                    |
+| `docker compose up -d`       | Chạy ứng dụng bằng Compose        |
+| `docker compose down`        | Dừng và xóa container của Compose |
+| `docker stats`               | Theo dõi CPU và RAM               |
+
+## **Lưu ý khi sử dụng VPS production**
+
+- Chỉ mở các cổng thực sự cần thiết, thường là 22, 80 và 443.
+- Không public cổng database như MySQL 3306 hoặc PostgreSQL 5432 nếu không cần truy cập từ bên ngoài.
+- Dùng Docker volumes để lưu dữ liệu lâu dài.
+- Thiết lập backup định kỳ cho database và dữ liệu quan trọng.
+- Cập nhật Docker và các container thường xuyên.
+
+Hướng dẫn trên sử dụng phương pháp cài đặt chính thức của Docker, tương thích Ubuntu 22.04 LTS.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://docs.docker.com\&sz=32)
+
+Docker Docs+1
+
+
+
+**Bạn dự định sử dụng Docker trên VPS để làm gì?** Ví dụ: chạy Node.js/NestJS, Next.js, PostgreSQL, Redis, Nginx Proxy Manager hoặc Portainer.
+
+Mình có thể hướng dẫn tiếp cách triển khai bằng `docker-compose.yml`, cấu hình domain và HTTPS SSL để chạy ứng dụng thực tế trên VPS.
