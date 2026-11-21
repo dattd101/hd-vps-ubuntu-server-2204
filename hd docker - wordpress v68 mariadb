@@ -1,0 +1,415 @@
+# **Triển khai WordPress 6.8 + MariaDB bằng Docker Compose**
+
+Mình sẽ thiết lập dự án WordPress trên VPS Ubuntu 22.04 với cấu hình:
+
+| Thành phần        | Cấu hình                           |
+| ----------------- | ---------------------------------- |
+| Thư mục dự án     | `/var/www/udemo02`                 |
+| WordPress         | 6.8                                |
+| Database          | MariaDB 11.4                       |
+| Web server        | Apache (trong container WordPress) |
+| Domain            | `udemo02.sku.io.vn`                |
+| Docker network    | `udemo02_network`                  |
+| Database storage  | Docker volume                      |
+| WordPress storage | Thư mục trên VPS                   |
+
+Cấu trúc dự án:
+
+```
+/var/www/udemo02/
+├── docker-compose.yml
+├── .env
+├── wordpress/
+│   ├── wp-admin/
+│   ├── wp-content/
+│   └── wp-includes/
+└── db-data/
+```
+
+WordPress sẽ chạy trên cổng `8082` của VPS. Sau đó dùng Nginx Reverse Proxy để kết nối domain và cấp HTTPS SSL bằng Let's Encrypt.
+
+## **1. Tạo thư mục dự án**
+
+SSH vào VPS và chạy:
+
+```
+sudo mkdir -p /var/www/udemo02/{wordpress,db-data}
+cd /var/www/udemo02
+```
+
+## **2. Tạo file .env**
+
+Tạo mật khẩu ngẫu nhiên:
+
+```
+openssl rand -hex 24
+```
+
+Tạo file:
+
+```
+sudo nano /var/www/udemo02/.env
+```
+
+Nội dung:
+
+```
+DB_NAME=udemo02_db
+DB_USER=udemo02_user
+DB_PASSWORD=THAY_BANG_MAT_KHAU_MANH
+DB_ROOT_PASSWORD=THAY_BANG_MAT_KHAU_ROOT_KHAC
+
+WORDPRESS_PORT=8082
+WORDPRESS_DOMAIN=udemo02.sku.io.vn
+```
+
+Thay hai mật khẩu bằng hai chuỗi ngẫu nhiên khác nhau.
+
+Lưu file bằng `Ctrl + O`, Enter, `Ctrl + X`.
+
+Bảo vệ file:
+
+```
+sudo chmod 600 /var/www/udemo02/.env
+```
+
+## **3. Tạo file docker-compose.yml**
+
+```
+sudo nano /var/www/udemo02/docker-compose.yml
+```
+
+Dán nội dung:
+
+```
+name: udemo02
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: udemo02_db
+    restart: unless-stopped
+
+    environment:
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+
+    volumes:
+      - ./db-data:/var/lib/mysql
+
+    networks:
+      - udemo02_network
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - healthcheck.sh --connect --innodb_initialized
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  wordpress:
+    image: wordpress:6.8-apache
+    container_name: udemo02_wordpress
+    restart: unless-stopped
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    ports:
+      - "127.0.0.1:${WORDPRESS_PORT}:80"
+
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${DB_NAME}
+      WORDPRESS_DB_USER: ${DB_USER}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD}
+      WORDPRESS_TABLE_PREFIX: wp_
+
+      WORDPRESS_CONFIG_EXTRA: |
+        if (
+          isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) &&
+          $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https'
+        ) {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+
+        define('WP_HOME', 'https://${WORDPRESS_DOMAIN}');
+        define('WP_SITEURL', 'https://${WORDPRESS_DOMAIN}');
+
+    volumes:
+      - ./wordpress:/var/www/html
+
+    networks:
+      - udemo02_network
+
+networks:
+  udemo02_network:
+    driver: bridge
+```
+
+**Giải thích cấu hình:**
+
+- `udemo02_db`: Container MariaDB, không mở cổng database ra Internet.
+- `udemo02_wordpress`: Container WordPress 6.8 chạy Apache.
+- `./wordpress`: Chứa toàn bộ mã nguồn WordPress và dữ liệu upload.
+- `./db-data`: Chứa dữ liệu MariaDB trên VPS.
+- `127.0.0.1:8082:80`: Chỉ cho phép Nginx trên chính VPS truy cập WordPress qua cổng 8082.
+- `WORDPRESS_CONFIG_EXTRA`: Giúp WordPress nhận biết HTTPS khi chạy sau reverse proxy.
+
+Cấu hình này giả định **Nginx được cài trực tiếp trên VPS**, không chạy trong container khác.
+
+## **4. Khởi chạy WordPress và MariaDB**
+
+Chuyển vào thư mục:
+
+```
+cd /var/www/udemo02
+```
+
+Kiểm tra file Compose:
+
+```
+sudo docker compose config --quiet
+```
+
+Tải images:
+
+```
+sudo docker compose pull
+```
+
+Khởi động:
+
+```
+sudo docker compose up -d
+```
+
+Kiểm tra:
+
+```
+sudo docker compose ps
+```
+
+Kết quả mong đợi:
+
+```
+NAME                STATUS
+udemo02_db          Up (healthy)
+udemo02_wordpress   Up
+```
+
+Kiểm tra WordPress trên VPS:
+
+```
+curl -I http://127.0.0.1:8082
+```
+
+Nếu trả về HTTP 200 hoặc HTTP 302 thì web server đã phản hồi.
+
+## **5. Cấu hình DNS domain**
+
+Tại nơi quản lý DNS của `sku.io.vn`, tạo bản ghi:
+
+| Type | Name    | Value         |
+| ---- | ------- | ------------- |
+| A    | udemo02 | IP_PUBLIC_VPS |
+
+Ví dụ nếu IP VPS là `103.123.45.67`:
+
+```
+udemo02.sku.io.vn → 103.123.45.67
+```
+
+Kiểm tra DNS:
+
+```
+dig +short udemo02.sku.io.vn A
+```
+
+Nếu chưa có lệnh `dig`:
+
+```
+sudo apt install dnsutils -y
+```
+
+Đợi DNS trỏ đúng IP VPS trước khi cấp SSL.
+
+## **6. Cài Nginx Reverse Proxy**
+
+Nếu VPS chưa có Nginx:
+
+```
+sudo apt install nginx -y
+sudo systemctl enable --now nginx
+```
+
+Tạo cấu hình domain:
+
+```
+sudo nano /etc/nginx/sites-available/udemo02.sku.io.vn
+```
+
+Nội dung:
+
+```
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name udemo02.sku.io.vn;
+
+    client_max_body_size 128M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 300;
+        proxy_connect_timeout 60;
+        proxy_send_timeout 300;
+    }
+}
+```
+
+Kích hoạt website:
+
+```
+sudo ln -s \
+  /etc/nginx/sites-available/udemo02.sku.io.vn \
+  /etc/nginx/sites-enabled/
+```
+
+Kiểm tra cấu hình:
+
+```
+sudo nginx -t
+```
+
+Nếu thành công:
+
+```
+sudo systemctl reload nginx
+```
+
+Đảm bảo firewall của VPS cho phép TCP 80 và 443. Nếu dùng UFW, cho phép Nginx Full trước khi bật UFW và giữ quyền truy cập SSH.
+
+## **7. Cài SSL HTTPS miễn phí**
+
+Cài Certbot:
+
+```
+sudo apt install -y certbot python3-certbot-nginx
+```
+
+Cấp SSL:
+
+```
+sudo certbot --nginx \
+  -d udemo02.sku.io.vn
+```
+
+Nhập email và làm theo hướng dẫn.
+
+Kiểm tra tự động gia hạn:
+
+```
+sudo certbot renew --dry-run
+```
+
+Sau khi hoàn tất, website có thể truy cập qua:
+
+**WordPress Website**
+
+[https://udemo02.sku.io.vn](https://udemo02.sku.io.vn?utm_source=chatgpt.com)
+
+Mở website&#x20;
+
+**WordPress Admin**
+
+[https://udemo02.sku.io.vn/wp-admin/](https://udemo02.sku.io.vn/wp-admin/?utm_source=chatgpt.com)
+
+Mở Admin&#x20;
+
+Đây là địa chỉ dự kiến sau khi bạn triển khai thành công, chưa phải xác nhận website đang hoạt động.
+
+## **8. Hoàn tất cài đặt WordPress 6.8**
+
+Truy cập:
+
+`https://udemo02.sku.io.vn/wp-admin/install.php`
+
+Chọn ngôn ngữ và nhập:
+
+- **Site Title:** UDemo02
+- **Username:** Tên tài khoản quản trị riêng, tránh dùng `admin`
+- **Password:** Mật khẩu mạnh
+- **Email:** Email quản trị website
+
+Nhấn **Install WordPress** để hoàn tất.
+
+## **9. Các lệnh quản lý dự án**
+
+Chạy trong thư mục:
+
+```
+cd /var/www/udemo02
+```
+
+| Công việc            | Lệnh                                          |
+| -------------------- | --------------------------------------------- |
+| Khởi động            | `sudo docker compose up -d`                   |
+| Dừng                 | `sudo docker compose stop`                    |
+| Khởi động lại        | `sudo docker compose restart`                 |
+| Xem trạng thái       | `sudo docker compose ps`                      |
+| Xem logs             | `sudo docker compose logs -f`                 |
+| Xem logs WordPress   | `sudo docker logs -f udemo02_wordpress`       |
+| Truy cập container   | `sudo docker exec -it udemo02_wordpress bash` |
+| Tắt và xóa container | `sudo docker compose down`                    |
+
+Lưu ý: `docker compose down` không xóa hai thư mục dữ liệu `wordpress` và `db-data`. Tuy nhiên, bạn vẫn cần sao lưu cả hai trước khi cập nhật hoặc thay đổi cấu hình quan trọng.
+
+## **10. Kiểm tra quyền thư mục WordPress**
+
+Nếu gặp lỗi không thể tải plugin, theme hoặc hình ảnh, kiểm tra quyền sở hữu:
+
+```
+sudo chown -R 33:33 /var/www/udemo02/wordpress
+```
+
+Không sử dụng `chmod -R 777` vì không an toàn.
+
+## **Kiến trúc sau triển khai**
+
+**Internet**
+
+udemo02.sku.io.vn
+
+**Nginx + Let's Encrypt**
+
+VPS Ubuntu · HTTPS 443
+
+Docker · udemo02_network
+
+**WordPress 6.8 + Apache**
+
+127.0.0.1:8082 → container:80
+
+**MariaDB 11.4**
+
+Port 3306 · chỉ trong Docker network
+
+/var/www/udemo02
+
+**Một câu hỏi quan trọng:** VPS của bạn hiện đang dùng **Nginx cài trực tiếp trên Ubuntu**, **Nginx Proxy Manager chạy Docker**, hay **chưa có Nginx**?
+
+Vì cấu hình domain và SSL sẽ khác nhau tùy trường hợp, mình có thể điều chỉnh dự án `udemo02` để không xung đột với những website khác trên VPS.
